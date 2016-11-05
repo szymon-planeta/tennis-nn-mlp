@@ -4,6 +4,7 @@ Defines multilayer perceptron neural network model.
 """
 import numpy as np
 from logger import LOGGER
+from statistics import mean
 
 def logistic(x):
     """Logistic function."""
@@ -48,9 +49,10 @@ class MLP(object):
         activation_fun (function): Activation function.
         activation_fun_d (function): Activation function derivative.
         learn_coef (float): Learning coefficient.
+        mom_coef (float): Momentum coefficient.
     """
     def __init__(self, structure, cost_fun=squared_error, activation_fun=logistic,
-                 activation_fun_d=logistic_d, learn_coef=0.2):
+                 activation_fun_d=logistic_d, learn_coef=0.2, mom_coef=0.1):
         """Initializes MLP with random weights.
 
         Args:
@@ -61,6 +63,7 @@ class MLP(object):
             activation_fun (function): Activation function.
             activation_fun_d (function): Activation function derivative.
             learn_coef (float): Learning coefficient.
+            mom_coef (float): Momentum coefficient.
         """
         self.structure = structure
         self.weights = [np.random.rand(structure[i-1], structure[i])
@@ -71,6 +74,8 @@ class MLP(object):
         self.activation_fun_d = activation_fun_d
         self.cost_fun = cost_fun
         self.learn_coef = learn_coef
+        self.mom = [np.zeros(w.shape) for w in self.weights]
+        self.mom_coef = mom_coef
 
     def predict_single(self, x_in):
         """Predicts output vector based on a given single input vector.
@@ -102,24 +107,83 @@ class MLP(object):
         self.predict_single(x_in)
         return self.cost_fun(self.y[-1], d_out)
 
-    def train_single(self, x_in, d_out):
+    def train_single(self, x_in, d_out, debug=False):
         """Predicts output for a given input vector (single sample).
         Calculates error between predicted vector and correct given d_out
         vector.
         Backpropagates error to hidden layers.
         Computes gradient and corrects weights.
+        If debug mode is enabled, checks if gradient is calculated correctly.
 
         Args:
             x_in (numpy.ndarray): Input vector (without bias).
             d_out (numpy.ndarray): Desired output vector.
+            debug (Boolean): Enables or disable numerical gradient check.
         """
         cost = self.get_cost(x_in, d_out)
         deltas = self.compute_deltas(d_out)
         gradient = self.compute_gradient(deltas)
-        print("Gradient: ", flatten(gradient))
-        num_gradient = self.compute_numerical_gradient(x_in, d_out)
-        print("Numerical: ", num_gradient)
+        if debug:
+            num_gradient = self.compute_numerical_gradient(x_in, d_out)
+            diff = (flatten(gradient) - num_gradient).sum()**2
+            LOGGER.debug("Squared gradient difference: %s", diff)
+
         self.correct_weights(gradient)
+
+    def start_training(self, X_train, D_train, X_test, D_test, tolerance=0.01,
+                      epochs=1000):
+        """Online training process of MLP. Uses X_train, D_train as training
+        dataset, X_test, D_test as test dataset.
+
+        Args:
+            X_train ([numpy.ndarray]): List of numpy.ndarray containing input
+                                        vectors for training dataset.
+            D_train ([numpy.ndarray]): List of numpy.ndarray containing desired
+                                        output for training dataset.
+            X_test ([numpy.ndarray]): List of numpy.ndarray containing input
+                                        vectors for test dataset.
+            D_test ([numpy.ndarray]): List of numpy.ndarray containing desired
+                                        output for test dataset.
+            tolerance (float): Learning stops if error is lower than this value.
+            epochs (float): Learning stops after that many epochs.
+        """
+        e = tolerance + 1
+        epoch = 1
+        while e > tolerance and epoch < epochs:
+            self.train_multiple(X_train, D_train)
+            e = self.test_multiple(X_test, D_test)
+            LOGGER.debug("Epoch: %s, Current error: %s", epoch, e)
+            epoch += 1
+        LOGGER.info("Training complete. Error: %s, Epoch: %s", e, epoch)
+
+    def train_multiple(self, X_in, D_out):
+        """Invokes self.train_single for every input-output pair given in
+        arguments.
+
+        Args:
+            X_in ([numpy.ndarray]): List of numpy.ndarray containing input
+                                    vectors.
+            D_out ([numpy.ndarray]): List of numpy.ndarray containing desired
+                                     output vectors.
+        """
+        for x, d in zip(X_in, D_out):
+            self.train_single(x, d)
+
+    def test_multiple(self, X_in, D_out):
+        """Predicts output for every vector in X_in, compares predicted output
+        with desired output D_out, returns mean of costs.
+
+        Args:
+            X_in ([numpy.ndarray]): List of numpy.ndarray containing input
+                                    vectors.
+            D_out ([numpy.ndarray]): List of numpy.ndarray containing desired
+                                     output vectors.
+
+        Returns:
+            mean (float): Mean of cost function values.
+        """
+        costs = [self.get_cost(x, d) for x, d in zip(X_in, D_out)]
+        return mean(costs)
 
     def compute_deltas(self, d_out):
         """Backpropagates error. Returns list of errors for each layer except
@@ -163,6 +227,7 @@ class MLP(object):
         self.weights = expand(flat_weights, self.structure)
 
     def compute_numerical_gradient(self, x_in, d_out):
+        """Computes gradient numerically. Used for debugging."""
         saved_weights = self.get_flat_weights()
         eps = 1e-4
         gradient = np.zeros(saved_weights.shape)
@@ -184,20 +249,31 @@ class MLP(object):
         self.set_flat_weights(saved_weights)
         return gradient
 
-    def correct_weights(self, gradient):
+    def correct_weights(self, gradient, with_momentum=True):
+        """Corrects weights values.
+
+        Args:
+            gradient ([numpy.ndarray]): Gradient (same shape as self.weights).
+            with_momentum (Boolean): If True, saves correction values to
+                                     self.mom.
+        """
         for i in range(len(self.weights)):
-            self.weights[i] = self.weights[i] - gradient[i]*self.learn_coef
+            dweights = -gradient[i]*self.learn_coef + self.mom[i]*self.mom_coef
+            self.weights[i] = self.weights[i] + dweights
+            if with_momentum:
+                self.mom[i] = dweights
 
 
 if __name__ == '__main__':
     np.random.seed(1)
     inputs = np.array(([1, 1], [1, 0], [0, 1], [0, 0]), dtype=float)
     outputs = np.array(([0], [1], [1], [0]), dtype=float)
-    net = MLP([2, 3, 1], learn_coef=0.2)
+    net = MLP([2, 3, 1], learn_coef=0.2, mom_coef=0.1)
     print("Should get: ", outputs)
-#    net.train_single(inputs[0], outputs[0])
-    for i in range(1):
-        for j, o in zip(inputs, outputs):
-            net.train_single(j, o)
+#    for i in range(10000):
+#        for j, o in zip(inputs, outputs):
+#            net.train_single(j, o)
+    net.start_training(inputs, outputs, inputs, outputs, epochs=30000,
+                       tolerance=0.0001)
     for i in inputs:
         print(net.predict_single(i))
