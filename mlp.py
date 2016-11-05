@@ -66,7 +66,7 @@ class MLP(object):
             mom_coef (float): Momentum coefficient.
         """
         self.structure = structure
-        self.weights = [np.random.rand(structure[i-1], structure[i])
+        self.weights = [np.random.rand(structure[i-1]+1, structure[i])
                         for i in range(1, len(structure))]
         self.y = [np.ndarray(output) for output in structure]
         self.z = [np.ndarray(output) for output in structure]
@@ -87,11 +87,16 @@ class MLP(object):
         Returns:
             numpy.ndarray: Predicted output vector.
         """
-        self.y[0] = self.z[0] = x_in
+        self.y[0] = self.add_bias(x_in)
         for i in range(len(self.weights)):
             self.z[i+1] = np.dot(self.y[i], self.weights[i])
             self.y[i+1] = self.activation_fun(self.z[i+1])
+            if i < len(self.weights)-1:
+                self.y[i+1] = self.add_bias(self.y[i+1])
         return self.y[-1]
+
+    def add_bias(self, vector):
+        return np.concatenate([[1], vector])
 
     def get_cost(self, x_in, d_out):
         """Uses predict_single to predict output for given input vector.
@@ -196,10 +201,10 @@ class MLP(object):
             deltas ([numpy.ndarray]): List of vectors with errors for each
                 layer (except input layer).
         """
-        deltas = [-(d_out-self.y[-1])*self.activation_fun_d(self.z[-1])]
+        deltas = [(self.y[-1]-d_out)*self.activation_fun_d(self.z[-1])]
         for i in range(-1, -len(self.weights), -1):
             deltas.insert(0, np.dot(deltas[i],
-                                    self.weights[i].T)*self.activation_fun_d(self.z[i-1]))
+                                    self.weights[i].T)[1:]*self.activation_fun_d(self.z[i-1]))
         return deltas
 
     def compute_gradient(self, deltas):
@@ -259,7 +264,7 @@ class MLP(object):
         """
         for i in range(len(self.weights)):
             dweights = -gradient[i]*self.learn_coef + self.mom[i]*self.mom_coef
-            self.weights[i] = self.weights[i] + dweights
+            self.weights[i] += dweights
             if with_momentum:
                 self.mom[i] = dweights
 
