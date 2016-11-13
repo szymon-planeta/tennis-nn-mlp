@@ -45,6 +45,7 @@ class DataCollector(object):
         stats = [*p1_stats, h2h, *p2_stats]
         LOGGER.debug("<%s> Tour ID: <%s> | Player 1 ID: <%s> | Player 2 ID: <%s> -- got stats vector:", date, tour_id, p1_id, p2_id)
         LOGGER.debug("<%s>", stats)
+        return stats
         
     def get_player_info(self, player, date, tour_id):
         p_id = player if isinstance(player, int) else self.get_player_id(player)
@@ -60,14 +61,14 @@ class DataCollector(object):
     def get_player_id(self, player_name):
         SQL = "SELECT ID_P FROM players_atp WHERE NAME_P='{}'".format(player_name)                                                                                                      
         result = self.execute_sql(SQL)
-        p_id = result[0][0]
+        p_id = result[0][0] if result else -1
         LOGGER.debug("Player name: %20s | Found ID: %s", player_name, p_id)
         return p_id
 
     def get_player_ranking(self, player_id, date):
         SQL = "SELECT TOP 1 POS_R FROM ratings_atp WHERE ID_P_R={} AND DATE_R<=#{}# ORDER BY DATE_R DESC;".format(player_id, date)
         result = self.execute_sql(SQL)
-        p_rank = result[0][0]
+        p_rank = result[0][0] if result else -1
         LOGGER.debug("<%s> Player ID: <%6s> | Rank: <%s>", date, player_id, p_rank)
         return p_rank
       
@@ -75,11 +76,13 @@ class DataCollector(object):
         year = date[:4] + '-01-01'
         SQL = "SELECT  ID1_G, ID2_G FROM games_atp WHERE (ID1_G={id} OR ID2_G={id}) AND (DATE_G<#{date}# AND DATE_G>=#{year}#);".format(id=p_id, date=date, year=year)
         matches = self.execute_sql(SQL)
+        winrate = -1
         wins = 0
-        for match in matches:
-            if match[0] == p_id:
-                wins += 1
-        winrate = wins/len(matches) 
+        if matches:
+            for match in matches:
+                if match[0] == p_id:
+                    wins += 1
+            winrate = wins/len(matches) 
         LOGGER.debug("<%s> Player ID: <%6s> | Yearly winrate: <%s>", date, p_id, winrate)
         return winrate
         
@@ -90,18 +93,20 @@ class DataCollector(object):
         start_date = start_date.strftime( self.d_format)
         SQL = "SELECT  ID1_G, ID2_G FROM games_atp WHERE (ID1_G={id} OR ID2_G={id}) AND (DATE_G<#{date}# AND DATE_G>=#{start_date}#);".format(id=p_id, date=date, start_date=start_date)
         matches = self.execute_sql(SQL)
+        winrate = -1
         wins = 0
-        for match in matches:
-            if match[0] == p_id:
-                wins += 1
-        winrate = wins/len(matches) 
+        if matches:
+            for match in matches:
+                if match[0] == p_id:
+                    wins += 1
+            winrate = wins/len(matches)
         LOGGER.debug("<%s> Player ID: <%6s> | Winrate since <%s>: <%s>", date, p_id, start_date, winrate)
         return winrate
         
     def get_tour_court_type_id(self, tour_id):
         SQL = "SELECT ID_C_T FROM tours_atp WHERE ID_T={};".format(tour_id)
         result = self.execute_sql(SQL)
-        tour_court_type_id = result[0][0]
+        tour_court_type_id = result[0][0] if result else -1
         LOGGER.debug("Tour ID: <%s> | Found court type ID: <%s>", tour_id, tour_court_type_id)
         return tour_court_type_id
        
@@ -111,10 +116,12 @@ class DataCollector(object):
                     "WHERE (ID1_G={id} OR ID2_G={id}) AND (DATE_G<#{date}# OR DATE_T<#{date}#)AND ID_C_T={c_t_id};").format(id=p_id, date=date, c_t_id=court_type_id)
         matches = self.execute_sql(SQL)
         wins = 0
-        for match in matches:
-              if match[0] == p_id:
-                wins += 1
-        winrate = wins/len(matches) 
+        winrate = -1
+        if matches:
+            for match in matches:
+                  if match[0] == p_id:
+                    wins += 1
+            winrate = wins/len(matches) 
         LOGGER.debug("<%s> Player ID: <%6s> | Winrate on court id <%s>: <%s>", date, p_id, court_type_id, winrate)
         return winrate
         
@@ -130,46 +137,63 @@ class DataCollector(object):
             all_matches += matches
             t_id = self.get_prev_tour(t_id)
         wins = 0
-        for match in all_matches:
-              if match[0] == p_id:
-                wins += 1
-        winrate = wins/len(all_matches) 
+        winrate = -1
+        if all_matches:
+            for match in all_matches:
+                  if match[0] == p_id:
+                    wins += 1
+            winrate = wins/len(all_matches) 
         LOGGER.debug("<%s> Player ID: <%6s> | Winrate in tour id <%s>: <%s>", date, p_id, tour_id, winrate)
         return winrate    
             
     def get_prev_tour(self, tour_id):
         SQL = "SELECT LINK_T FROM tours_atp WHERE ID_T={};".format(tour_id)
-        try:
-            prev_id = self.execute_sql(SQL)
-            prev_id = prev_id[0][0]
-        except:
-            prev_id = None
+        prev_id = self.execute_sql(SQL)
+        prev_id = prev_id[0][0] if prev_id else None
         LOGGER.debug("Tour ID: <%s> | Got parent tour ID: <%s>", tour_id, prev_id)
         return prev_id
         
     def get_head_to_head(self, p1_id, p2_id, date):
         SQL = ("SELECT ID1_G, ID2_G FROM games_atp "
                     "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T "
-                    "WHERE (ID1_G={p1_id} AND ID2_G={p2_id}) "
-                    "OR (ID1_G={p2_id} AND ID2_G={p1_id}) "
+                    "WHERE (ID1_G={p1_id} OR ID1_G={p2_id}) "
+                    "AND (ID2_G={p1_id} OR ID2_G={p2_id}) "
                     "AND (DATE_G<#{date}# OR DATE_T<#{date}#) ;").format(p1_id=p1_id, p2_id=p2_id, date=date)
         matches = self.execute_sql(SQL)
         wins = 0
-        for match in matches:
-            if match[0] == p1_id:
-                wins += 1
-        p1_winrate = wins/len(matches)
+        p1_winrate = -1
+        if matches:
+            for match in matches:
+                if match[0] == p1_id:
+                    wins += 1
+            p1_winrate = wins/len(matches)
         LOGGER.debug("Player 1 ID: <%6s> | Player 2 ID: <%6s> | Player 1 winrate: <%s>", p1_id, p2_id, p1_winrate)
         return p1_winrate
         
         
+    def get_stats_for_last_n_matches(self, N):
+        SQL = ("SELECT TOP {} * FROM (SELECT ID1_G, ID2_G, ID_T_G, IIF(DATE_G Is Not Null, DATE_G, DATE_T) AS DATE_S FROM games_atp "
+                    "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T) ORDER BY DATE_S DESC;".format(N))
+        matches = self.execute_sql(SQL)
+        dataset = []
+        for m in matches:
+            match = m
+            match[3] = match[3].strftime(self.d_format)
+            dataset.append(self.get_stats_for_match(*match))
+        return dataset
+        
+       # (case (DATE_G is not null) DATE_G case (DATE_G is null) DATE_T) data_wlasciwa
 if __name__ == '__main__':
+    start = datetime.now()
     with DatabaseConnection(DRV, MDB, PWD) as con:
         d = DataCollector(con)
-        date = "2013-10-06"
-        p1_name = 'Santiago Giraldo'
-        p2_name = 'Lukasz Kubot'
-        p1_id = d.get_player_id(p1_name)
-        p2_id = d.get_player_id(p2_name)
-        tour_id = 9862
-        d.get_stats_for_match(p1_id, p2_id, tour_id, date)
+        matches = d.get_stats_for_last_n_matches(3)
+        #date = "2013-10-06"
+        #p1_name = 'Santiago Giraldo'
+        #p2_name = 'Lukasz Kubot'
+        #p1_id = d.get_player_id(p1_name)
+        #p2_id = d.get_player_id(p2_name)
+        #tour_id = 9862
+        #d.get_stats_for_match(p1_id, p2_id, tour_id, date)
+    end = datetime.now()
+    LOGGER.info("Elapsed time: %s", end-start)
