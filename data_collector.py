@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pyodbc
+import numpy as np
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
@@ -43,9 +44,10 @@ class DataCollector(object):
         p2_stats = self.get_player_info(p2_id, date, tour_id)
         h2h = self.get_head_to_head(p1_id, p2_id, date)
         stats = [*p1_stats, h2h, *p2_stats]
+        LOGGER.info("<%s> [Tour ID: <%s>]Collected data for match: <%s> vs <%s>", date, tour_id, p1_id, p2_id)
         LOGGER.debug("<%s> Tour ID: <%s> | Player 1 ID: <%s> | Player 2 ID: <%s> -- got stats vector:", date, tour_id, p1_id, p2_id)
         LOGGER.debug("<%s>", stats)
-        return stats
+        return np.asarray(stats)
         
     def get_player_info(self, player, date, tour_id):
         p_id = player if isinstance(player, int) else self.get_player_id(player)
@@ -74,7 +76,11 @@ class DataCollector(object):
       
     def get_player_season_winrate(self, p_id, date):
         year = date[:4] + '-01-01'
-        SQL = "SELECT  ID1_G, ID2_G FROM games_atp WHERE (ID1_G={id} OR ID2_G={id}) AND (DATE_G<#{date}# AND DATE_G>=#{year}#);".format(id=p_id, date=date, year=year)
+        SQL = ("SELECT  ID1_G, ID2_G FROM games_atp "
+                   "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T "
+                   "WHERE (ID1_G={id} OR ID2_G={id}) "
+                   "AND ((DATE_G<#{date}# AND DATE_G>=#{year}#) "
+                   "OR (DATE_T<#{date}# AND DATE_T>=#{year}#));").format(id=p_id, date=date, year=year)
         matches = self.execute_sql(SQL)
         winrate = -1
         wins = 0
@@ -91,7 +97,11 @@ class DataCollector(object):
         months_obj = timedelta(days=30*months)
         start_date -= months_obj
         start_date = start_date.strftime( self.d_format)
-        SQL = "SELECT  ID1_G, ID2_G FROM games_atp WHERE (ID1_G={id} OR ID2_G={id}) AND (DATE_G<#{date}# AND DATE_G>=#{start_date}#);".format(id=p_id, date=date, start_date=start_date)
+        SQL = ("SELECT  ID1_G, ID2_G FROM games_atp "
+                   "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T "
+                   "WHERE (ID1_G={id} OR ID2_G={id}) "
+                   "AND ((DATE_G<#{date}# AND DATE_G>=#{start_date}#) "
+                   "OR (DATE_T<#{date}# AND DATE_T>=#{start_date}#));").format(id=p_id, date=date, start_date=start_date)
         matches = self.execute_sql(SQL)
         winrate = -1
         wins = 0
@@ -170,19 +180,34 @@ class DataCollector(object):
         LOGGER.debug("Player 1 ID: <%6s> | Player 2 ID: <%6s> | Player 1 winrate: <%s>", p1_id, p2_id, p1_winrate)
         return p1_winrate
         
-        
     def get_stats_for_last_n_matches(self, N):
-        SQL = ("SELECT TOP {} * FROM (SELECT ID1_G, ID2_G, ID_T_G, IIF(DATE_G Is Not Null, DATE_G, DATE_T) AS DATE_S FROM games_atp "
-                    "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T) ORDER BY DATE_S DESC;".format(N))
+        SQL = ("SELECT TOP {} ID1_G, ID2_G, ID_T_G, DATE_G FROM (games_atp "
+                    "INNER JOIN players_atp ON games_atp.ID1_G=players_atp.ID_P) WHERE players_atp.COUNTRY_P<>'N/A' "
+                    "ORDER BY DATE_G DESC;".format(N))
         matches = self.execute_sql(SQL)
         dataset = []
         for m in matches:
             match = m
             match[3] = match[3].strftime(self.d_format)
             dataset.append(self.get_stats_for_match(*match))
-        return dataset
+        LOGGER.info("Collected data for %s matches.", len(dataset))
+        return np.asarray(dataset)
         
-       # (case (DATE_G is not null) DATE_G case (DATE_G is null) DATE_T) data_wlasciwa
+    def get_stats_for_all_matches(self):
+        SQL = ("SELECT ID1_G, ID2_G, ID_T_G, DATE_G FROM (games_atp "
+                    "INNER JOIN players_atp ON games_atp.ID1_G=players_atp.ID_P) "
+                    "WHERE players_atp.COUNTRY_P<>'N/A' AND DATE_G IS NOT NULL "
+                    "ORDER BY DATE_G DESC;")
+        matches = self.execute_sql(SQL)
+        dataset = []
+        for m in matches:
+            match = m
+            match[3] = match[3].strftime(self.d_format)
+            dataset.append(self.get_stats_for_match(*match))
+        LOGGER.info("Collected data for %s matches.", len(dataset))
+        return np.asarray(dataset)
+        
+        
 if __name__ == '__main__':
     start = datetime.now()
     with DatabaseConnection(DRV, MDB, PWD) as con:
