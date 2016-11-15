@@ -87,12 +87,14 @@ class MLP(object):
         Returns:
             numpy.ndarray: Predicted output vector.
         """
+        LOGGER.debug("Got input: %s", x_in)
         self.y[0] = self.add_bias(x_in)
         for i in range(len(self.weights)):
             self.z[i+1] = np.dot(self.y[i], self.weights[i])
             self.y[i+1] = self.activation_fun(self.z[i+1])
             if i < len(self.weights)-1:
                 self.y[i+1] = self.add_bias(self.y[i+1])
+        LOGGER.debug("Predicted: %s", self.y[-1])
         return self.y[-1]
 
     def add_bias(self, vector):
