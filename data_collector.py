@@ -178,12 +178,17 @@ class DataCollector(object):
         matches = self.execute_sql(SQL)
         gems = 0
         if matches:
-            for match in matches:
+            for match in matches:        
                 gemss = [m.split('-') for m in match[2].split()]
                 if match[0] == p_id:
-                    gems += sum([int(g[0][0]) for g in gemss])           
+                    pos = 0
                 elif match[1] == p_id:
-                    gems += sum([int(g[1][0]) for g in gemss])
+                    pos = 1
+                for g in gemss:
+                    try:
+                        gems += int(g[pos][0])
+                    except (ValueError, IndexError):
+                        pass
         LOGGER.debug("<%s> Player ID: <%6s> | Gems since <%s>: <%s>", date, p_id, start_date, gems)
         return gems
     
