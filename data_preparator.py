@@ -16,13 +16,15 @@ class DataPreparator(object):
             row[1] = 0.4 if row[1] == -1 else row[1]        #p1_yr_winrate
             row[2] = 0.4 if row[2] == -1 else row[2]        #p1_2mon_winrate
             row[3] = 0.4 if row[3] == -1 else row[3]        #p1_court_winrate
-            row[4] = 0.4 if row[4] == -1 else row[4]        #p1_tour_winrate            
-            row[5] = 0.5 if row[5] == -1 else row[5]        #h2h
-            row[6] = 1.0 if row[6] == -1 else row[6]/900 #p2_rank
-            row[7] = 0.4 if row[7] == -1 else row[7]        #p2_yr_winrate
-            row[8] = 0.4 if row[8] == -1 else row[8]        #p2_2mon_winrate
-            row[9] = 0.4 if row[9] == -1 else row[9]        #p2_court_winrate
-            row[10] = 0.4 if row[10] == -1 else row[10]  #p2_tour_winrate            
+            row[4] = 0.4 if row[4] == -1 else row[4]        #p1_tour_winrate           
+            row[5] = row[5]/100                                         #p1_gems
+            row[6] = 0.5 if row[5] == -1 else row[5]        #h2h
+            row[7] = 1.0 if row[6] == -1 else row[6]/900 #p2_rank
+            row[8] = 0.4 if row[7] == -1 else row[7]        #p2_yr_winrate
+            row[9] = 0.4 if row[8] == -1 else row[8]        #p2_2mon_winrate
+            row[10] = 0.4 if row[9] == -1 else row[9]      #p2_court_winrate
+            row[11] = 0.4 if row[10] == -1 else row[10]  #p2_tour_winrate            
+            row[12] = row[12]/100                                     #p2_gems
 
 
     def prepare_data(self):
@@ -30,9 +32,9 @@ class DataPreparator(object):
             self.standardize()
             swapped = np.zeros(self.all_data.shape)
             for i in range(swapped.shape[0]):
-                swapped[i][:5] = self.all_data[i][6:]
-                swapped[i][5] = 1 - self.all_data[i][5]
-                swapped[i][6:] = self.all_data[i][:5]
+                swapped[i][:6] = self.all_data[i][7:]
+                swapped[i][6] = 1 - self.all_data[i][6]
+                swapped[i][7:] = self.all_data[i][:6]
 
             new_y = np.concatenate([np.zeros([len(self.all_data),1]),
                                     np.ones([len(self.all_data), 1])], axis=1)
