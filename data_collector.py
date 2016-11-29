@@ -58,7 +58,8 @@ class DataCollector(object):
         court_type_id = self.get_tour_court_type_id(tour_id)
         p_court_winrate = self.get_player_court_winrate(p_id, court_type_id, date)
         p_tour_winrate = self.get_player_tour_winrate(p_id, tour_id, date)
-        return [p_rank, p_year_winrate, p_2mon_winrate, p_court_winrate, p_tour_winrate]
+        p_gems = self.get_player_last_days_gems(p_id, date, 3)
+        return [p_rank, p_year_winrate, p_2mon_winrate, p_court_winrate, p_tour_winrate, p_gems]
         
     def get_player_id(self, player_name):
         SQL = "SELECT ID_P FROM players_atp WHERE NAME_P='{}'".format(player_name)                                                                                                      
@@ -163,6 +164,29 @@ class DataCollector(object):
         LOGGER.debug("Tour ID: <%s> | Got parent tour ID: <%s>", tour_id, prev_id)
         return prev_id
         
+    
+    def get_player_last_days_gems(self, p_id, date, days):
+        start_date = datetime.strptime(date, self.d_format)
+        days_obj = timedelta(days=days)
+        start_date -= days_obj
+        start_date = start_date.strftime(self.d_format)
+        SQL = ("SELECT  ID1_G, ID2_G, RESULT_G FROM games_atp "
+                   "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T "
+                   "WHERE (ID1_G={id} OR ID2_G={id}) "
+                   "AND ((DATE_G<#{date}# AND DATE_G>=#{start_date}#) "
+                   "OR (DATE_T<#{date}# AND DATE_T>=#{start_date}#));").format(id=p_id, date=date, start_date=start_date)
+        matches = self.execute_sql(SQL)
+        gems = 0
+        if matches:
+            for match in matches:
+                gemss = [m.split('-') for m in match[2].split()]
+                if match[0] == p_id:
+                    gems += sum([int(g[0][0]) for g in gemss])           
+                elif match[1] == p_id:
+                    gems += sum([int(g[1][0]) for g in gemss])
+        LOGGER.debug("<%s> Player ID: <%6s> | Gems since <%s>: <%s>", date, p_id, start_date, gems)
+        return gems
+    
     def get_head_to_head(self, p1_id, p2_id, date):
         SQL = ("SELECT ID1_G, ID2_G FROM games_atp "
                     "INNER JOIN tours_atp ON games_atp.ID_T_G=tours_atp.ID_T "
@@ -212,7 +236,7 @@ if __name__ == '__main__':
     start = datetime.now()
     with DatabaseConnection(DRV, MDB, PWD) as con:
         d = DataCollector(con)
-        matches = d.get_stats_for_last_n_matches(3)
+        matches = d.get_stats_for_last_n_matches(40)
         #date = "2013-10-06"
         #p1_name = 'Santiago Giraldo'
         #p2_name = 'Lukasz Kubot'

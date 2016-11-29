@@ -4,16 +4,21 @@ from mlp import MLP
 from pickler import serialize, deserialize
 from config import MDB, DRV, PWD
 from logger import LOGGER
+from datetime import datetime
 
 
 if __name__ == '__main__':
-    #with DatabaseConnection(DRV, MDB, PWD) as con:
-        #d = DataCollector(con)
-        #matches = d.get_stats_for_last_n_matches(1000)
-        #matches = d.get_stats_for_all_matches()
+    start = datetime.now()
+    with DatabaseConnection(DRV, MDB, PWD) as con:
+        d = DataCollector(con)
+        #matches = d.get_stats_for_last_n_matches(10)
+        matches = d.get_stats_for_all_matches()
 
-    #file = 'all_matches'
-    #serialize(matches, file)
+    file = 'all_matches_13'
+    serialize(matches, file)
+    LOGGER.info("Serialized %s matches to file: %s", len(matches), file)
+    end = datetime.now()
+    LOGGER.info("Elapsed time: %s", end-start)
     #data = deserialize(file)
     #d = DataPreparator(data)
     
@@ -30,20 +35,20 @@ if __name__ == '__main__':
     #net.start_training(train_X, train_Y, test_X, test_Y, epochs=5, tolerance=0.0001)    
     #serialize(net, 'net')
   
-    net=deserialize('net')
-    #net.test_multiple(test_X, test_Y)
-    with DatabaseConnection(DRV, MDB, PWD) as con:
-        d = DataCollector(con)
-        p1_id = d.get_player_id('Andy Murray')
-        #p1_id = d.get_player_id('Marin Cilic')
-        #p1_id = d.get_player_id('Kei Nishikori')
-        #p2_id = d.get_player_id('Stan Wawrinka')
-        #p2_id = d.get_player_id('Dominic Thiem')
-        #p1_id = d.get_player_id('Gael Monfils')
-        p2_id = d.get_player_id('Novak Djokovic')
-        #p1_id = d.get_player_id('David Goffin')
-        #p1_id = d.get_player_id('Milos Raonic')
-        tour_id = 13869
-        date = '2016-11-20'
-        match = d.get_stats_for_match(p1_id, p2_id, tour_id, date)
-    net.predict_single(match)
+    # net=deserialize('net')
+    # #net.test_multiple(test_X, test_Y)
+    # with DatabaseConnection(DRV, MDB, PWD) as con:
+        # d = DataCollector(con)
+        # p1_id = d.get_player_id('Andy Murray')
+        # #p1_id = d.get_player_id('Marin Cilic')
+        # #p1_id = d.get_player_id('Kei Nishikori')
+        # #p2_id = d.get_player_id('Stan Wawrinka')
+        # #p2_id = d.get_player_id('Dominic Thiem')
+        # #p1_id = d.get_player_id('Gael Monfils')
+        # p2_id = d.get_player_id('Novak Djokovic')
+        # #p1_id = d.get_player_id('David Goffin')
+        # #p1_id = d.get_player_id('Milos Raonic')
+        # tour_id = 13869
+        # date = '2016-11-20'
+        # match = d.get_stats_for_match(p1_id, p2_id, tour_id, date)
+    # net.predict_single(match)
