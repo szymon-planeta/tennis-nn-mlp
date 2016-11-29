@@ -76,6 +76,7 @@ class MLP(object):
         self.learn_coef = learn_coef
         self.mom = [np.zeros(w.shape) for w in self.weights]
         self.mom_coef = mom_coef
+        self.correct_predictions = 0
 
     def predict_single(self, x_in):
         """Predicts output vector based on a given single input vector.
@@ -112,6 +113,10 @@ class MLP(object):
             cost (float): Calculated cost.
         """
         self.predict_single(x_in)
+        LOGGER.debug("Should get: %s, Got: %s", d_out, self.y[-1])
+        result = np.array([1, 0]) if self.y[-1][0] > self.y[-1][1] else np.array([0, 1])
+        if np.array_equal(result, d_out):
+            self.correct_predictions += 1
         return self.cost_fun(self.y[-1], d_out)
 
     def train_single(self, x_in, d_out, debug=False):
@@ -154,12 +159,13 @@ class MLP(object):
             tolerance (float): Learning stops if error is lower than this value.
             epochs (float): Learning stops after that many epochs.
         """
+        LOGGER.info("Training started.")
         e = tolerance + 1
         epoch = 1
         while e > tolerance and epoch < epochs:
             self.train_multiple(X_train, D_train)
             e = self.test_multiple(X_test, D_test)
-            LOGGER.debug("Epoch: %s, Current error: %s", epoch, e)
+            LOGGER.info("Epoch: %s, Current error: %s", epoch, e)
             epoch += 1
         LOGGER.info("Training complete. Error: %s, Epoch: %s", e, epoch)
 
@@ -189,7 +195,9 @@ class MLP(object):
         Returns:
             mean (float): Mean of cost function values.
         """
+        self.correct_predictions = 0
         costs = [self.get_cost(x, d) for x, d in zip(X_in, D_out)]
+        LOGGER.info("%s%% success on test set.", 100*self.correct_predictions/len(costs))
         return mean(costs)
 
     def compute_deltas(self, d_out):
